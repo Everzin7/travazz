@@ -14,29 +14,38 @@ TARGET_NUMBER = "+55 34 99163-7054"
 GROUP_NAME = "Travazap | bot de travas"
 
 def navigate_to_group(page: Page):
-    logger.info(f"Searching for group '{GROUP_NAME}'...")
+    """
+    Navigates to the Travazap group.
+    """
+    logger.info(f"Navigating to group: {GROUP_NAME}...")
+    
     try:
-        # Search input
-        search_input = page.locator("input[placeholder='Search']")
-        search_input.wait_for(state="visible", timeout=10000)
-        search_input.click()
-        search_input.fill(GROUP_NAME)
+        # Search input - Telegram Web K often changes the placeholder or selector
+        # We'll try multiple selectors
+        search_input = page.locator('input[placeholder="Search"], input[placeholder="Search chats"], .input-search > input')
         
-        # Wait for results
-        time.sleep(2)
+        # Wait for any of them to be visible
+        # Increased timeout to 30s because initial load can be slow
+        search_input.first.wait_for(state="visible", timeout=30000)
         
-        # Click the chat
-        # Using a broad selector to catch the chat item
-        chat_selector = f".row-title:has-text('{GROUP_NAME}')"
-        page.locator(chat_selector).first.click()
+        # Click and fill
+        search_input.first.click()
+        search_input.first.fill(GROUP_NAME)
         
-        logger.info("Entered group.")
+        # Wait for results and click the group
+        # We look for the exact text match to avoid clicking random channels
+        group_item = page.locator(f".chat-list .chat-item >> text={GROUP_NAME}")
+        group_item.first.wait_for(state="visible", timeout=10000)
+        group_item.first.click()
         
-        # Wait for the chat to load (look for the header)
-        page.wait_for_selector(f".chat-info .title:has-text('{GROUP_NAME}')", timeout=10000)
+        # Wait for chat to open (look for header or message input)
+        page.wait_for_selector(".chat-input, .message-input-wrapper", timeout=20000)
+        logger.info(f"Entered group: {GROUP_NAME}")
         
     except Exception as e:
-        logger.error(f"Error navigating to group: {e}")
+        logger.error(f"Failed to navigate to group: {e}")
+        # Take a screenshot to help debug
+        page.screenshot(path="debug_nav_error.png")
         raise
 
 def run_cycle(page: Page):
