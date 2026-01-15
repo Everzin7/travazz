@@ -32,9 +32,22 @@ def login(page: Page):
     qr_data = None
     for attempt in range(5):
         try:
-            # Take screenshot of the entire page to ensure we capture the QR
-            png_bytes = page.screenshot()
+            # Locate the canvas element specifically
+            # Telegram Web K uses a canvas for the QR code
+            try:
+                qr_canvas = page.wait_for_selector("canvas", timeout=5000)
+                # Take screenshot of the CANVAS only, not the full page
+                # This increases resolution/focus on the QR
+                png_bytes = qr_canvas.screenshot()
+            except:
+                logger.warning("Canvas not found, trying full page screenshot...")
+                png_bytes = page.screenshot()
             
+            # Save debug image for the last attempt
+            if attempt == 4:
+                with open("debug_qr_last.png", "wb") as f:
+                    f.write(png_bytes)
+
             # Try to decode
             qr_data = decode_qr_from_bytes(png_bytes)
             
@@ -42,7 +55,7 @@ def login(page: Page):
                 break
             
             logger.warning(f"Attempt {attempt+1}/5: QR Code not detected. Retrying...")
-            time.sleep(2)
+            time.sleep(3)
         except Exception as e:
             logger.error(f"Error during capture: {e}")
             time.sleep(2)
