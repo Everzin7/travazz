@@ -30,15 +30,22 @@ def decode_qr_from_bytes(image_bytes):
             return None
             
         # Add a white border (Quiet Zone) - Crucial for CV2
-        # 240x240 -> 280x280
-        img = cv2.copyMakeBorder(img, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+        img = cv2.copyMakeBorder(img, 50, 50, 50, 50, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+        
+        # Resize to make it bigger (2x) - Helps with low-res canvas
+        img = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         
         detector = cv2.QRCodeDetector()
         
-        # Try 1: Original with border
+        # Try 1: Original with border and resize
         data, bbox, _ = detector.detectAndDecode(img)
         if data: return data
         
+        # Try 1.1: Super Resolution (Scale Up 4x)
+        img_huge = cv2.resize(img, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        data, bbox, _ = detector.detectAndDecode(img_huge)
+        if data: return data
+
         # Try 2: Inverted (often needed for dark mode)
         img_inv = cv2.bitwise_not(img)
         data, bbox, _ = detector.detectAndDecode(img_inv)
@@ -49,11 +56,16 @@ def decode_qr_from_bytes(image_bytes):
         data, bbox, _ = detector.detectAndDecode(gray)
         if data: return data
         
-        # Try 3.1: Zoomed/Cropped (Center) - New Strategy
-        # Sometimes there's too much whitespace
-        h, w = gray.shape
-        center_crop = gray[int(h*0.1):int(h*0.9), int(w*0.1):int(w*0.9)]
-        data, bbox, _ = detector.detectAndDecode(center_crop)
+        # Try 3.1: Histogram Equalization (Contrast Boost)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray_eq = clahe.apply(gray)
+        data, bbox, _ = detector.detectAndDecode(gray_eq)
+        if data: return data
+        
+        # Try 3.2: Gaussian Blur (Denoise) + Threshold
+        blur = cv2.GaussianBlur(gray, (5,5), 0)
+        _, thresh_otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        data, bbox, _ = detector.detectAndDecode(thresh_otsu)
         if data: return data
 
         # Try 4: Binary Threshold

@@ -32,29 +32,49 @@ def login(page: Page):
     qr_data = None
     for attempt in range(5):
         try:
-            # Locate the canvas element specifically
-            # Telegram Web K uses a canvas for the QR code
+            # METHOD 1: JS Extraction (Most Reliable for Headless)
             try:
+                logger.info(f"Attempt {attempt+1}: Extracting canvas data via JS...")
                 qr_canvas = page.wait_for_selector("canvas", timeout=5000)
-                # Take screenshot of the CANVAS only, not the full page
-                # This increases resolution/focus on the QR
-                png_bytes = qr_canvas.screenshot()
-            except:
-                logger.warning("Canvas not found, trying full page screenshot...")
-                png_bytes = page.screenshot()
-            
-            # Save debug image for the last attempt
-            if attempt == 4:
-                with open("debug_qr_last.png", "wb") as f:
-                    f.write(png_bytes)
+                
+                # Execute JS to get the base64 data
+                # Try a broader selector to find ANY canvas
+                base64_data = page.evaluate("""() => {
+                    const canvases = document.querySelectorAll('canvas');
+                    for (const canvas of canvases) {
+                        if (canvas.width > 100 && canvas.height > 100) {
+                             return canvas.toDataURL('image/png');
+                        }
+                    }
+                    return null;
+                }""")
+                
+                if base64_data:
+                    import base64
+                    # Remove header "data:image/png;base64,"
+                    base64_data = base64_data.split(",")[1]
+                    png_bytes = base64.b64decode(base64_data)
+                    
+                    # Save the JS extracted image for debugging
+                    if attempt == 0:
+                        with open("debug_js_qr.png", "wb") as f:
+                            f.write(png_bytes)
 
-            # Try to decode
-            qr_data = decode_qr_from_bytes(png_bytes)
+                    qr_data = decode_qr_from_bytes(png_bytes)
+                    if qr_data:
+                        logger.info("QR detected via JS extraction!")
+                        break
+            except Exception as js_e:
+                logger.warning(f"JS Extraction failed: {js_e}")
+
+            # METHOD 2: Screenshot Fallback
+            if not qr_data:
+                logger.info("Fallback to screenshot...")
+                png_bytes = page.screenshot()
+                qr_data = decode_qr_from_bytes(png_bytes)
+                if qr_data: break
             
-            if qr_data:
-                break
-            
-            logger.warning(f"Attempt {attempt+1}/5: QR Code not detected. Retrying...")
+            logger.warning("QR Code not detected. Retrying...")
             time.sleep(3)
         except Exception as e:
             logger.error(f"Error during capture: {e}")
