@@ -1,0 +1,6 @@
+playwright
+rich
+opencv-python-headless
+qrcode
+pillow
+numpy
